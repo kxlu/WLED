@@ -617,7 +617,8 @@ void serializeInfo(JsonObject root)
   root[F("ver")] = versionString;
   root[F("vid")] = VERSION;
   //root[F("cn")] = WLED_CODENAME;
-
+  root[F("hwled")] = "HOPE"; //hwled
+  
   JsonObject leds = root.createNestedObject("leds");
   leds[F("count")] = strip.getLengthTotal();
   leds[F("pwr")] = strip.currentMilliamps;
