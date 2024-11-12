@@ -262,6 +262,14 @@ WLED_GLOBAL char versionString[] _INIT(TOSTRING(WLED_VERSION));
 WLED_GLOBAL char apPass[65]  _INIT(WLED_AP_PASS);
 WLED_GLOBAL char otaPass[33] _INIT(DEFAULT_OTA_PASS);
 
+//hwled#login//
+WLED_GLOBAL bool hwDisableLogin   _INIT(true);
+WLED_GLOBAL bool hwLoginOk   _INIT(false);
+WLED_GLOBAL uint32_t hwLoginTimer _INIT(0);
+WLED_GLOBAL IPAddress hwLoginIP _INIT_N(((0, 0, 0, 0)));
+WLED_GLOBAL IPAddress hwTrustIP _INIT_N(((0, 0, 0, 0)));
+//hwled#login
+
 // Hardware and pin config
 #ifndef BTNPIN
 WLED_GLOBAL int8_t btnPin[WLED_MAX_BUTTONS] _INIT({0});
@@ -681,7 +689,10 @@ WLED_GLOBAL bool doSerializeConfig _INIT(false);        // flag to initiate savi
 WLED_GLOBAL bool doReboot          _INIT(false);        // flag to initiate reboot from async handlers
 WLED_GLOBAL bool doPublishMqtt     _INIT(false);
 
-// status led
+// status led //hwled#lc3200//
+//#ifndef STATUSLED
+//#define STATUSLED 12
+//#endif //hwled#lc3200
 #if defined(STATUSLED)
 WLED_GLOBAL unsigned long ledStatusLastMillis _INIT(0);
 WLED_GLOBAL uint8_t ledStatusType _INIT(0); // current status type - corresponds to number of blinks per second

@@ -39,7 +39,7 @@ bool isIp(String str) {
 }
 
 void handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
-  if (!correctPIN) {
+  if (!correctPIN or !serveRequest(request)) { //hwled#login
     if (final) request->send(401, "text/plain", FPSTR(s_unlock_cfg));
     return;
   }
@@ -119,6 +119,7 @@ void initServer()
   #ifndef WLED_DISABLE_2D
   server.on(SET_F("/liveview2D"), HTTP_GET, [](AsyncWebServerRequest *request){
     if (handleIfNoneMatchCacheHeader(request)) return;
+    if (!serveRequest(request)) return; //hwled#login
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", PAGE_liveviewws2D, PAGE_liveviewws2D_length);
     response->addHeader(FPSTR(s_content_enc),"gzip");
     setStaticContentCacheHeaders(response);
@@ -128,6 +129,7 @@ void initServer()
 #endif
   server.on(SET_F("/liveview"), HTTP_GET, [](AsyncWebServerRequest *request){
     if (handleIfNoneMatchCacheHeader(request)) return;
+    if (!serveRequest(request)) return; //hwled#login
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", PAGE_liveview, PAGE_liveview_length);
     response->addHeader(FPSTR(s_content_enc),"gzip");
     setStaticContentCacheHeaders(response);
@@ -161,8 +163,15 @@ void initServer()
   });
 
   server.on(SET_F("/reset"), HTTP_GET, [](AsyncWebServerRequest *request){
-    serveMessage(request, 200,F("Rebooting now..."),F("Please wait ~10 seconds..."),129);
-    doReboot = true;
+    //hwled#login//
+    if( serveRequest(request) ){
+      serveMessage(request, 200,F("Rebooting now..."),F("Please wait ~10 seconds..."),129);
+      doReboot = true;
+    }
+    else{
+      serveMessage(request, 500, "Access Denied", F("Please login first !"), 254);
+      doReboot = false;
+    }//hwled#login
   });
 
   server.on(SET_F("/settings"), HTTP_POST, [](AsyncWebServerRequest *request){
@@ -178,6 +187,7 @@ void initServer()
     bool isConfig = false;
 
     if (!requestJSONBufferLock(14)) return;
+    if (!serveRequest(request)) return; //hwled#login
 
     DeserializationError error = deserializeJson(doc, (uint8_t*)(request->_tempObject));
     JsonObject root = doc.as<JsonObject>();
@@ -234,6 +244,16 @@ void initServer()
     request->send(200, "text/plain", (String)ESP.getFreeHeap());
   });
 
+  //hwled#login//
+  server.on("/login", HTTP_POST, [](AsyncWebServerRequest *request){
+    serveLogin(request, true);
+  });
+
+  server.on("/login", HTTP_GET, [](AsyncWebServerRequest *request){
+    serveLogin(request);
+  });
+  //hwled#login
+
 #ifdef WLED_ENABLE_USERMOD_PAGE
   server.on("/u", HTTP_GET, [](AsyncWebServerRequest *request){
     if (handleIfNoneMatchCacheHeader(request)) return;
@@ -257,6 +277,7 @@ void initServer()
   server.on(SET_F("/simple.htm"), HTTP_GET, [](AsyncWebServerRequest *request){
     if (handleFileRead(request, "/simple.htm")) return;
     if (handleIfNoneMatchCacheHeader(request)) return;
+    if (!serveRequest(request)) return; //hwled#login
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", PAGE_simple, PAGE_simple_L);
     response->addHeader(FPSTR(s_content_enc),"gzip");
     setStaticContentCacheHeaders(response);
@@ -306,6 +327,7 @@ void initServer()
     }
   },[](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
     if (!correctPIN || otaLock) return;
+    if (!serveRequest(request)) return; //hwled#login
     if(!index){
       DEBUG_PRINTLN(F("OTA Update Start"));
       WLED::instance().disableWatchdog();
@@ -336,6 +358,7 @@ void initServer()
 
   #ifdef WLED_ENABLE_DMX
   server.on(SET_F("/dmxmap"), HTTP_GET, [](AsyncWebServerRequest *request){
+    if (!serveRequest(request)) return; //hwled#login
     request->send_P(200, "text/html", PAGE_dmxmap     , dmxProcessor);
   });
   #else
@@ -357,6 +380,7 @@ void initServer()
   server.on(SET_F("/pixart.htm"), HTTP_GET, [](AsyncWebServerRequest *request){
     if (handleFileRead(request, F("/pixart.htm"))) return;
     if (handleIfNoneMatchCacheHeader(request)) return;
+    if (!serveRequest(request)) return; //hwled#login
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", PAGE_pixart, PAGE_pixart_L);
     response->addHeader(FPSTR(s_content_enc),"gzip");
     setStaticContentCacheHeaders(response);
@@ -368,6 +392,7 @@ void initServer()
   server.on(SET_F("/pxmagic.htm"), HTTP_GET, [](AsyncWebServerRequest *request){
     if (handleFileRead(request, F("/pxmagic.htm"))) return;
     if (handleIfNoneMatchCacheHeader(request)) return;
+    if (!serveRequest(request)) return; //hwled#login
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", PAGE_pxmagic, PAGE_pxmagic_L);
     response->addHeader(FPSTR(s_content_enc),"gzip");
     setStaticContentCacheHeaders(response);
@@ -442,6 +467,12 @@ void setStaticContentCacheHeaders(AsyncWebServerResponse *response)
 
 void serveIndex(AsyncWebServerRequest* request)
 {
+  //hwled#login//
+  if (!serveRequest(request)){
+    request->redirect(F("/login"));
+    return;
+  }//hwled#login
+
   if (handleFileRead(request, F("/index.htm"))) return;
 
   if (handleIfNoneMatchCacheHeader(request)) return;
@@ -556,6 +587,12 @@ void serveSettingsJS(AsyncWebServerRequest* request)
 
 void serveSettings(AsyncWebServerRequest* request, bool post)
 {
+  //hwled#login//
+  if (!serveRequest(request)){
+    serveMessage(request, 500, "Access Denied", F("Please login first !"), 254);
+    return;
+  }//hwled#login
+
   byte subPage = 0, originalSubPage = 0;
   const String& url = request->url();
 
@@ -654,3 +691,88 @@ void serveSettings(AsyncWebServerRequest* request, bool post)
   setStaticContentCacheHeaders(response);
   request->send(response);
 }
+
+//hwled#login//
+bool serveRequest(AsyncWebServerRequest* request)
+{
+  if( apActive || hwDisableLogin ) return true;
+
+  //WiFi or Ethernet connection
+  correctPIN = false;
+  if( !hwLoginOk ) return false;
+
+  if( request->client()->remoteIP() != hwLoginIP &&
+    request->client()->remoteIP() != hwTrustIP ) return false;
+
+  //# timeout : 10 minutes
+  if( millis() - hwLoginTimer > 600*1000 )
+  {
+      hwLoginOk = false;
+      return false;
+  }
+
+  hwLoginTimer = millis();
+  correctPIN = true;
+  return true;
+}
+
+void serveLogin(AsyncWebServerRequest* request, bool post)
+{
+  //HTTP GET
+  if( !post )
+  {
+    if( serveRequest(request) )
+    {
+      request->redirect(F("/"));
+    }
+    else
+    {
+      serveMessage(request, 200, "Login", \ 
+        F("<form action='/login' method='POST'><span> Enter Password : </span>&nbsp;<input type='password' name='PW' size=16 maxlength=32/>&nbsp;<input type='submit' value='Login' ><input type='hidden' name='UI' value=1 /></form>"), \
+        254);
+    }
+
+    return;
+  }
+
+  //HTTP POST
+  uint8_t rc = 1;
+
+  if( request->hasArg(F("PW")) )
+  {
+    if( strcmp(apPass, request->arg(F("PW")).c_str()) == 0 )
+    {
+      rc = 0;
+      hwLoginOk = true;
+      correctPIN = true;
+      hwLoginIP = request->client()->remoteIP();
+      hwLoginTimer = millis();
+
+      if( request->hasArg(F("TRUST")) )
+      {
+        hwTrustIP = hwLoginIP;
+      }
+    }
+  }
+
+  //# request from UI ?
+  if(request->hasArg(F("UI")))
+  {
+    if( rc == 0 )
+    {
+      request->redirect(F("/"));
+      return;
+    }
+    else
+    {
+      request->redirect(F("/login"));
+      return;
+    }
+  }
+  else
+  {
+    String s = "{\"error\":"+String(rc)+"}";
+    request->send(200, "application/json", s.c_str());
+  }
+}
+//hwled#login

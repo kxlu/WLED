@@ -378,6 +378,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(bootPreset, def["ps"]);
   CJSON(turnOnAtBoot, def["on"]); // true
   CJSON(briS, def["bri"]); // 128
+  CJSON(hwDisableLogin, def["disableLogin"]); //hwled#login
 
   JsonObject interfaces = doc["if"];
 
@@ -845,6 +846,7 @@ void serializeConfig() {
   def["ps"] = bootPreset;
   def["on"] = turnOnAtBoot;
   def["bri"] = briS;
+  def["disableLogin"] = hwDisableLogin; //#hwled#login
 
   JsonObject interfaces = doc.createNestedObject("if");
 

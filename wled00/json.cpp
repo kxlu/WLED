@@ -431,8 +431,13 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   ps = root[F("pdel")]; //deletion
   if (ps > 0 && ps < 251) deletePreset(ps);
   
-  ps = root[F("pboot")]; //hwled : save boot preset. Post submit to settings/leds does not save to FS
-  if (ps <= 250) bootPreset = ps; //hwled Ref. set.cpp handleSettingSet() # 316-317
+  //hwled#pboot//
+  ps = root[F("pboot")];
+  if (ps <= 250) {
+    bootPreset = ps;
+    doSerializeConfig = true;
+  }
+  //hwled#pboot
   
   // HTTP API commands (must be handled before "ps")
   const char* httpwin = root["win"];
@@ -617,7 +622,8 @@ void serializeInfo(JsonObject root)
   root[F("ver")] = versionString;
   root[F("vid")] = VERSION;
   //root[F("cn")] = WLED_CODENAME;
-  root[F("hwled")] = "HOPE"; //hwled
+  root[F("hwled")] = "HOPE"; //hwled#hwled
+  root[F("hwver")] = "0.1"; //hwled#hwver
   
   JsonObject leds = root.createNestedObject("leds");
   leds[F("count")] = strip.getLengthTotal();
@@ -1050,6 +1056,12 @@ class LockedJsonResponse: public AsyncJsonResponse {
 
 void serveJson(AsyncWebServerRequest* request)
 {
+  //hwled#login//
+  if(!serveRequest(request)){
+    request->send(200, "application/json", F("{\"error\":401}"));
+    return;
+  }//hwled#login
+
   byte subJson = 0;
   const String& url = request->url();
   if      (url.indexOf("state") > 0) subJson = JSON_PATH_STATE;

@@ -429,4 +429,9 @@ void XML_response(AsyncWebServerRequest *request, char* dest = nullptr);
 void URL_response(AsyncWebServerRequest *request);
 void getSettingsJS(byte subPage, char* dest);
 
+//hwled#login//
+bool serveRequest(AsyncWebServerRequest* request);
+void serveLogin(AsyncWebServerRequest* request, bool post = false);
+//hwled#login
+
 #endif
