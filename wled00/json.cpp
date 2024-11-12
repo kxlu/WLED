@@ -430,7 +430,10 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
 
   ps = root[F("pdel")]; //deletion
   if (ps > 0 && ps < 251) deletePreset(ps);
-
+  
+  ps = root[F("pboot")]; //hwled : save boot preset. Post submit to settings/leds does not save to FS
+  if (ps <= 250) bootPreset = ps; //hwled Ref. set.cpp handleSettingSet() # 316-317
+  
   // HTTP API commands (must be handled before "ps")
   const char* httpwin = root["win"];
   if (httpwin) {
