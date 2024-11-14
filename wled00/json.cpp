@@ -431,14 +431,6 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   ps = root[F("pdel")]; //deletion
   if (ps > 0 && ps < 251) deletePreset(ps);
   
-  //hwled#pboot//
-  ps = root[F("pboot")];
-  if (ps <= 250) {
-    bootPreset = ps;
-    doSerializeConfig = true;
-  }
-  //hwled#pboot
-  
   // HTTP API commands (must be handled before "ps")
   const char* httpwin = root["win"];
   if (httpwin) {
@@ -624,6 +616,7 @@ void serializeInfo(JsonObject root)
   //root[F("cn")] = WLED_CODENAME;
   root[F("hwled")] = "HOPE"; //hwled#hwled
   root[F("hwver")] = "0.1"; //hwled#hwver
+  root[F("hwbld")] = "1";   //hwled#hwbld
   
   JsonObject leds = root.createNestedObject("leds");
   leds[F("count")] = strip.getLengthTotal();
