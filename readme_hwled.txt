@@ -25,13 +25,7 @@ the hwled branch is the branch to make custom code changes
 
 #hwled      : A name to idenfity this is a custom build
 #hwver      : hwled version number
-
-#hwpboot    : Set boot preset
-
-            We need an API to set boot preset by Python script.
-            But ost submit to settings/leds for 'BP' does not write to FS.
-            doSerializeConfig is False when subPage is LED settings
-            Therefore we use JSON API state object to set boot preset
+#hwbld      : hwled build number
 
 #hwlogin    : Add login security
 
