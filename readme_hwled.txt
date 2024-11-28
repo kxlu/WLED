@@ -52,7 +52,7 @@ the hwled branch is the branch to make custom code changes
 
     esptool [--port /dev/tty/.usbserial-...] erase_flash 
     esptool [--port /dev/tty/.usbserial-...] write_flash 0x0 esp32_bootloader_v4.bin 
-    esptool [--port /dev/tty/.usbserial-...] erase_flash 0x0 hwled_hope_0.1_esp32_eth.bin
+    esptool [--port /dev/tty/.usbserial-...] write_flash 0x10000 hwled_hope_0.1_esp32_eth.bin
 
 6. Default AP is WLED-AP (if Ethernet is not connected), default password is wled1234.
 
