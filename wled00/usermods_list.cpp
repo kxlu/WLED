@@ -150,9 +150,11 @@
   #include "../usermods/smartnest/usermod_smartnest.h"
 #endif
 
+#ifndef WLED_ENABLE_DMX //#hwled:dmx
 #ifdef USERMOD_AUDIOREACTIVE
   #include "../usermods/audioreactive/audio_reactive.h"
 #endif
+#endif //#hwled:dmx
 
 #ifdef USERMOD_ANALOG_CLOCK
   #include "../usermods/Analog_Clock/Analog_Clock.h"
@@ -383,9 +385,11 @@ void registerUsermods()
   UsermodManager::add(new Smartnest());
   #endif
 
+  #ifndef WLED_ENABLE_DMX //#hwled:dmx
   #ifdef USERMOD_AUDIOREACTIVE
   UsermodManager::add(new AudioReactive());
   #endif
+  #endif //#hwled:dmx
 
   #ifdef USERMOD_ANALOG_CLOCK
   UsermodManager::add(new AnalogClockUsermod());

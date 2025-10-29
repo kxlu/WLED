@@ -476,4 +476,9 @@ void sendDataWs(AsyncWebSocketClient * client = nullptr);
 void XML_response(Print& dest);
 void getSettingsJS(byte subPage, Print& dest);
 
+//#hwled##hwlogin//
+bool serveRequest(AsyncWebServerRequest* request);
+void serveLogin(AsyncWebServerRequest* request, bool post = false);
+//#hwled##hwlogin
+
 #endif

@@ -631,6 +631,8 @@ void serializeInfo(JsonObject root)
   root[F("vid")] = VERSION;
   root[F("cn")] = F(WLED_CODENAME);
   root[F("release")] = releaseString;
+  root[F("hwver")] = "0.1.15"; //#hwled#hwver
+  root[F("hwbld")] = "1";   //#hwled#hwbld
 
   JsonObject leds = root.createNestedObject(F("leds"));
   leds[F("count")] = strip.getLengthTotal();
@@ -1067,6 +1069,13 @@ void serveJson(AsyncWebServerRequest* request)
 {
   byte subJson = 0;
   const String& url = request->url();
+
+  //#hwled#hwlogin
+  if(!serveRequest(request) && url.indexOf("info") < 0){    
+    request->send(200, "application/json", F("{\"error\":401}"));
+    return;
+  }//#hwled#hwlogin
+
   if      (url.indexOf("state")    > 0) subJson = JSON_PATH_STATE;
   else if (url.indexOf("info")     > 0) subJson = JSON_PATH_INFO;
   else if (url.indexOf("si")       > 0) subJson = JSON_PATH_STATE_INFO;

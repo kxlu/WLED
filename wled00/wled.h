@@ -275,6 +275,14 @@ WLED_GLOBAL char releaseString[] _INIT(WLED_RELEASE_NAME); // must include the q
 WLED_GLOBAL char apPass[65]  _INIT(WLED_AP_PASS);
 WLED_GLOBAL char otaPass[33] _INIT(DEFAULT_OTA_PASS);
 
+//#hwled#hwlogin//
+WLED_GLOBAL bool hwDisableLogin   _INIT(true);
+WLED_GLOBAL bool hwLoginOk   _INIT(false);
+WLED_GLOBAL uint32_t hwLoginTimer _INIT(0);
+WLED_GLOBAL IPAddress hwLoginIP _INIT_N(((0, 0, 0, 0)));
+WLED_GLOBAL IPAddress hwTrustIP _INIT_N(((0, 0, 0, 0)));
+//#hwled#hwlogin
+
 // Hardware and pin config
 #ifndef BTNPIN
   #define BTNPIN 0,-1
@@ -860,6 +868,10 @@ WLED_GLOBAL bool doReboot          _INIT(false);        // flag to initiate rebo
 WLED_GLOBAL bool psramSafe         _INIT(true);         // is it safe to use PSRAM (on ESP32 rev.1; compiler fix used "-mfix-esp32-psram-cache-issue")
 
 // status led
+//#hwled#lc3200//hwled#lc3201
+#ifndef STATUSLED
+#define STATUSLED 12
+#endif //#hwled#lc3200//hwled#lc3201
 #if defined(STATUSLED)
 WLED_GLOBAL unsigned long ledStatusLastMillis _INIT(0);
 WLED_GLOBAL uint8_t ledStatusType _INIT(0); // current status type - corresponds to number of blinks per second

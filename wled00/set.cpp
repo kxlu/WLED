@@ -7,6 +7,8 @@
 //called upon POST settings form submit
 void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
 {
+  if (!serveRequest(request)) return; //#hwled#hwlogin
+
   if (subPage == SUBPAGE_PINREQ)
   {
     checkSettingsPIN(request->arg(F("PIN")).c_str());
@@ -560,6 +562,12 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       const char *pin = request->arg(F("PIN")).c_str();
       unsigned pinLen = strlen(pin);
       if (pinLen == 4 || pinLen == 0) {
+
+        //#hwled#hwlogin
+        if (pinLen == 0) hwDisableLogin = true;
+        else hwDisableLogin = false;
+        //#hwled#hwlogin
+
         unsigned numZeros = 0;
         for (unsigned i = 0; i < pinLen; i++) numZeros += (pin[i] == '0');
         if (numZeros < pinLen || pinLen == 0) { // ignore 0000 input (placeholder)
@@ -808,6 +816,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
 bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
 {
   if (!(req.indexOf("win") >= 0)) return false;
+  if(!serveRequest(request)) return false; //#hwled#hwlogin
 
   int pos = 0;
   DEBUG_PRINTF_P(PSTR("API req: %s\n"), req.c_str());

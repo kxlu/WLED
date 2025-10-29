@@ -153,7 +153,7 @@ static String msgProcessor(const String& var)
 }
 
 static void handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
-  if (!correctPIN) {
+  if (!correctPIN || !serveRequest(request)) { //#hwled#hwlogin
     if (final) request->send(401, FPSTR(CONTENT_TYPE_PLAIN), FPSTR(s_unlock_cfg));
     return;
   }
@@ -230,11 +230,13 @@ void initServer()
 #ifdef WLED_ENABLE_WEBSOCKETS
   #ifndef WLED_DISABLE_2D 
   server.on(F("/liveview2D"), HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!serveRequest(request)) return; //#hwled#hwlogin
     handleStaticContent(request, "", 200, FPSTR(CONTENT_TYPE_HTML), PAGE_liveviewws2D, PAGE_liveviewws2D_length);
   });
   #endif
 #endif
   server.on(F("/liveview"), HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!serveRequest(request)) return; //#hwled#hwlogin
     handleStaticContent(request, "", 200, FPSTR(CONTENT_TYPE_HTML), PAGE_liveview, PAGE_liveview_length);
   });
 
@@ -270,8 +272,15 @@ void initServer()
   });
 
   server.on(F("/reset"), HTTP_GET, [](AsyncWebServerRequest *request){
-    serveMessage(request, 200,F("Rebooting now..."),F("Please wait ~10 seconds..."),129);
-    doReboot = true;
+    //#hwled#hwlogin
+    if( serveRequest(request) ){
+      serveMessage(request, 200,F("Rebooting now..."),F("Please wait ~10 seconds..."),129);
+      doReboot = true;
+    }
+    else{
+      serveMessage(request, 500, "Access Denied", F("Please login first !"), 254);
+      doReboot = false;
+    }//#hwled#hwlogin    
   });
 
   server.on(F("/settings"), HTTP_POST, [](AsyncWebServerRequest *request){
@@ -291,6 +300,8 @@ void initServer()
       serveJsonError(request, 503, ERR_NOBUF);
       return;
     }
+
+    if (!serveRequest(request)) return; //#hwled#hwlogin
 
     DeserializationError error = deserializeJson(*pDoc, (uint8_t*)(request->_tempObject));
     JsonObject root = pDoc->as<JsonObject>();
@@ -347,6 +358,16 @@ void initServer()
     request->send(200, FPSTR(CONTENT_TYPE_PLAIN), (String)ESP.getFreeHeap());
   });
 
+  //#hwled#hwlogin
+  server.on("/login", HTTP_POST, [](AsyncWebServerRequest *request){
+    serveLogin(request, true);
+  });
+
+  server.on("/login", HTTP_GET, [](AsyncWebServerRequest *request){
+    serveLogin(request);
+  });
+  //#hwled#hwlogin
+
 #ifdef WLED_ENABLE_USERMOD_PAGE
   server.on("/u", HTTP_GET, [](AsyncWebServerRequest *request) {
     handleStaticContent(request, "", 200, FPSTR(CONTENT_TYPE_HTML), PAGE_usermod, PAGE_usermod_length);
@@ -391,6 +412,7 @@ void initServer()
     }
   },[](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
     if (!correctPIN || otaLock) return;
+    if (!serveRequest(request)) return; //#hwled#hwlogin
     if(!index){
       DEBUG_PRINTLN(F("OTA Update Start"));
       #if WLED_WATCHDOG_TIMEOUT > 0
@@ -428,6 +450,7 @@ void initServer()
 
 #ifdef WLED_ENABLE_DMX
   server.on(F("/dmxmap"), HTTP_GET, [](AsyncWebServerRequest *request){
+    if (!serveRequest(request)) return; //#hwled#hwlogin
     request->send_P(200, FPSTR(CONTENT_TYPE_HTML), PAGE_dmxmap     , dmxProcessor);
   });
 #else
@@ -439,6 +462,11 @@ void initServer()
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     if (captivePortal(request)) return;
     if (!showWelcomePage || request->hasArg(F("sliders"))) {
+      //#hwled#hwlogin
+      if (!serveRequest(request)){
+        request->redirect(F("/login"));
+        return;
+      }//#hwled#hwlogin
       handleStaticContent(request, F("/index.htm"), 200, FPSTR(CONTENT_TYPE_HTML), PAGE_index, PAGE_index_L);
     } else {
       serveSettings(request);
@@ -448,6 +476,7 @@ void initServer()
 #ifdef WLED_ENABLE_PIXART
   static const char _pixart_htm[] PROGMEM = "/pixart.htm";
   server.on(_pixart_htm, HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!serveRequest(request)) return; //#hwled#hwlogin
     handleStaticContent(request, FPSTR(_pixart_htm), 200, FPSTR(CONTENT_TYPE_HTML), PAGE_pixart, PAGE_pixart_L);
   });
 #endif
@@ -455,12 +484,14 @@ void initServer()
 #ifndef WLED_DISABLE_PXMAGIC
   static const char _pxmagic_htm[] PROGMEM = "/pxmagic.htm";
   server.on(_pxmagic_htm, HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!serveRequest(request)) return; //#hwled#hwlogin
     handleStaticContent(request, FPSTR(_pxmagic_htm), 200, FPSTR(CONTENT_TYPE_HTML), PAGE_pxmagic, PAGE_pxmagic_L);
   });
 #endif
 
   static const char _cpal_htm[] PROGMEM = "/cpal.htm";
   server.on(_cpal_htm, HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!serveRequest(request)) return; //#hwled#hwlogin
     handleStaticContent(request, FPSTR(_cpal_htm), 200, FPSTR(CONTENT_TYPE_HTML), PAGE_cpal, PAGE_cpal_L);
   });
 
@@ -544,6 +575,12 @@ void serveSettingsJS(AsyncWebServerRequest* request)
 void serveSettings(AsyncWebServerRequest* request, bool post) {
   byte subPage = 0, originalSubPage = 0;
   const String& url = request->url();
+
+  //#hwled#hwlogin
+  if (!serveRequest(request)){
+    serveMessage(request, 500, "Access Denied", F("Please login first !"), 254);
+    return;
+  }//#hwled#hwlogin
 
   if (url.indexOf("sett") >= 0) {
     if      (url.indexOf(F(".js"))  > 0) subPage = SUBPAGE_JS;
@@ -648,3 +685,88 @@ void serveSettings(AsyncWebServerRequest* request, bool post) {
   }
   handleStaticContent(request, "", code, contentType, content, len);
 }
+
+//#hwled#hwlogin
+bool serveRequest(AsyncWebServerRequest* request)
+{
+  if( apActive || hwDisableLogin ) return true;
+
+  //WiFi or Ethernet connection
+  correctPIN = false;
+  if( !hwLoginOk ) return false;
+
+  if( request->client()->remoteIP() != hwLoginIP &&
+    request->client()->remoteIP() != hwTrustIP ) return false;
+
+  //# timeout : 10 minutes
+  if( millis() - hwLoginTimer > 600*1000 )
+  {
+      hwLoginOk = false;
+      return false;
+  }
+
+  hwLoginTimer = millis();
+  correctPIN = true;
+  return true;
+}
+
+void serveLogin(AsyncWebServerRequest* request, bool post)
+{
+  //HTTP GET
+  if( !post )
+  {
+    if( serveRequest(request) )
+    {
+      request->redirect(F("/"));
+    }
+    else
+    {
+      serveMessage(request, 200, "Login",
+        F("<form action='/login' method='POST'><span> Enter Password : </span>&nbsp;<input type='password' name='PW' size=16 maxlength=32/>&nbsp;<input type='submit' value='Login' ><input type='hidden' name='UI' value=1 /></form>"), \
+        254);
+    }
+
+    return;
+  }
+
+  //HTTP POST
+  uint8_t rc = 1;
+
+  if( request->hasArg(F("PW")) )
+  {
+    if( strcmp(apPass, request->arg(F("PW")).c_str()) == 0 )
+    {
+      rc = 0;
+      hwLoginOk = true;
+      correctPIN = true;
+      hwLoginIP = request->client()->remoteIP();
+      hwLoginTimer = millis();
+
+      if( request->hasArg(F("TRUST")) )
+      {
+        hwTrustIP = hwLoginIP;
+      }
+    }
+  }
+
+  //# request from UI ?
+  if(request->hasArg(F("UI")))
+  {
+    if( rc == 0 )
+    {
+      request->redirect(F("/"));
+      return;
+    }
+    else
+    {
+      request->redirect(F("/login"));
+      return;
+    }
+  }
+  else
+  {
+    String s = "{\"error\":"+String(rc)+"}";
+    request->send(200, "application/json", s.c_str());
+  }
+}
+//#hwled#hwlogin

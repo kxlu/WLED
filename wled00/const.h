@@ -382,6 +382,7 @@
 #define WLED_ETH_SERG74           10
 #define WLED_ETH_ESP32_POE_WROVER 11
 #define WLED_ETH_LILYGO_T_POE_PRO 12
+#define WLED_ETH_DEFAULT  WLED_ETH_WT32_ETH01 //#hwled#lc3200
 
 //Hue error codes
 #define HUE_ERROR_INACTIVE        0

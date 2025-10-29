@@ -51,12 +51,22 @@ void toggleOnOff()
 {
   if (bri == 0)
   {
+    //#hwled#lc3201//
+    #ifdef EFUSE_SHDN_PIN
+    digitalWrite(EFUSE_SHDN_PIN, HIGH);
+    #endif //#hwled#lc3201  
+
     bri = briLast;
     strip.restartRuntime();
   } else
   {
     briLast = bri;
     bri = 0;
+
+    //#hwled#lc3201//
+    #ifdef EFUSE_SHDN_PIN
+    digitalWrite(EFUSE_SHDN_PIN, LOW);
+    #endif //#hwled#lc3201  
   }
   stateChanged = true;
 }
