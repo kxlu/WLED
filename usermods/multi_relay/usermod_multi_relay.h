@@ -75,6 +75,21 @@ typedef struct relay_t {
   uint16_t delay;       // amount of ms to wait after it is activated
 } Relay;
 
+//#hwled:lc3200ac
+#ifdef HWLED_TRIAC_ZCD_IO
+volatile int8_t triac_relay_pins[MULTI_RELAY_MAX_RELAYS];
+volatile bool triac_relay_states[MULTI_RELAY_MAX_RELAYS][2];
+void IRAM_ATTR triacZCD() { //Triac Zero Crossing Detection
+  for(int i=0; i<MULTI_RELAY_MAX_RELAYS; i++){
+    if(triac_relay_pins[i] < 0) break;
+    if(triac_relay_states[i][0] != triac_relay_states[i][1]){
+      pinMode(triac_relay_pins[i], OUTPUT);
+      digitalWrite(triac_relay_pins[i], triac_relay_states[i][0]);
+      triac_relay_states[i][1] = triac_relay_states[i][0];
+    }
+  }
+}
+#endif //#hwled:lc3200ac
 
 class MultiRelay : public Usermod {
 
@@ -401,8 +416,12 @@ void MultiRelay::switchRelay(uint8_t relay, bool mode) {
     IOexpanderWrite(addrPcf8574, state);
     DEBUG_PRINT(F("Writing to PCF8574: ")); DEBUG_PRINTLN(state);
   } else if (_relay[relay].pin < 100) {
+    #ifdef HWLED_TRIAC_ZCD_IO //#hwled:lc3200ac
+    triac_relay_states[relay][0] = _relay[relay].invert ? !_relay[relay].state : _relay[relay].state;
+    #else
     pinMode(_relay[relay].pin, OUTPUT);
     digitalWrite(_relay[relay].pin, _relay[relay].invert ? !_relay[relay].state : _relay[relay].state);
+    #endif
   } else return;
   publishMqtt(relay);
 }
@@ -511,14 +530,26 @@ void MultiRelay::setup() {
 
   uint8_t state = 0;
   for (int i=0; i<MULTI_RELAY_MAX_RELAYS; i++) {
+    #ifdef HWLED_TRIAC_ZCD_IO //#hwled:lc3200ac
+    triac_relay_pins[i] = -1;
+    #endif    
     if (usePcf8574 && _relay[i].pin >= 100) {
       uint8_t pin = _relay[i].pin - 100;
       if (!_relay[i].external) _relay[i].state = !offMode;
       state |= (uint8_t)(_relay[i].invert ? !_relay[i].state : _relay[i].state) << pin;
     } else if (_relay[i].pin<100 && _relay[i].pin>=0) {
       if (PinManager::allocatePin(_relay[i].pin,true, PinOwner::UM_MultiRelay)) {
+        #ifdef HWLED_TRIAC_ZCD_IO //#hwled:lc3200ac
+        triac_relay_pins[i] = _relay[i].pin;
+        _relay[i].state = false;
+        triac_relay_states[i][0] = _relay[i].invert ? !_relay[i].state : _relay[i].state;
+        triac_relay_states[i][1] = !triac_relay_states[i][0]; //Force ZCD ISR to write to IO
+        pinMode(HWLED_TRIAC_ZCD_IO, INPUT_PULLUP);
+        attachInterrupt(digitalPinToInterrupt(HWLED_TRIAC_ZCD_IO), triacZCD, FALLING);
+        #else
         if (!_relay[i].external) _relay[i].state = !offMode;
-        switchRelay(i, _relay[i].state);
+        switchRelay(i, _relay[i].state);        
+        #endif //#hwled:lc3200ac       
         _relay[i].active = false;
       } else {
         _relay[i].pin = -1;  // allocation failed
@@ -826,6 +857,12 @@ bool MultiRelay::readFromConfig(JsonObject &root) {
   // use "return !top["newestParameter"].isNull();" when updating Usermod with new features
   return !top[FPSTR(_pcf8574)].isNull();
 }
+
+//#hwled:lc3200ac : define a global function so that it can be called at e131.cpp
+void MultiRelay_switchRelay(uint8_t relay, bool mode){
+  MultiRelay* multiRelay = (MultiRelay*)usermods.lookup(USERMOD_ID_MULTI_RELAY);
+  if(multiRelay) multiRelay->switchRelay(relay, mode);
+} //#hwled:lc3200ac
 
 // strings to reduce flash memory usage (used more than twice)
 const char MultiRelay::_name[]            PROGMEM = "MultiRelay";

@@ -481,4 +481,7 @@ bool serveRequest(AsyncWebServerRequest* request);
 void serveLogin(AsyncWebServerRequest* request, bool post = false);
 //#hwled##hwlogin
 
+//#hwled:lc3200ac
+void MultiRelay_switchRelay(uint8_t relay, bool mode);
+
 #endif
