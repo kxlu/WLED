@@ -553,6 +553,13 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(turnOnAtBoot, def["on"]); // true
   CJSON(briS, def["bri"]); // 128
 
+  //#lc3201
+  #ifdef EFUSE_SHDN_PIN
+  pinMode(EFUSE_SHDN_PIN, OUTPUT);
+  if(turnOnAtBoot) digitalWrite(EFUSE_SHDN_PIN, HIGH);
+  else digitalWrite(EFUSE_SHDN_PIN, LOW);
+  #endif
+
   JsonObject interfaces = doc["if"];
 
   JsonObject if_sync = interfaces["sync"];

@@ -706,6 +706,8 @@ void serializeInfo(JsonObject root)
   root[F("ver")] = versionString;
   root[F("vid")] = VERSION;
   root[F("cn")] = F(WLED_CODENAME);
+  root[F("hwled")] = F("16.0.1");  //#hwled
+  root[F("hwbld")] = F("2610153"); //#hwled
   root[F("release")] = releaseString;
   root[F("repo")] = repoString;
   root[F("deviceId")] = getDeviceId();

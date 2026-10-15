@@ -73,6 +73,19 @@ typedef struct relay_t {
   uint16_t delay;       // amount of ms to wait after it is activated
 } Relay;
 
+#ifdef HWLED_TRIAC_ZCD_IO //#lc3200ac
+volatile int8_t triac_relay_pins[MULTI_RELAY_MAX_RELAYS];
+volatile bool triac_relay_states[MULTI_RELAY_MAX_RELAYS][2];
+void IRAM_ATTR triacZCD() { //Triac Zero Crossing Detection
+  for(int i=0; i<MULTI_RELAY_MAX_RELAYS; i++){
+    if(triac_relay_pins[i] < 0) continue;
+    if(triac_relay_states[i][0] != triac_relay_states[i][1]){
+      digitalWrite(triac_relay_pins[i], triac_relay_states[i][0]);
+      triac_relay_states[i][1] = triac_relay_states[i][0];
+    }
+  }
+}
+#endif
 
 class MultiRelay : public Usermod {
 
@@ -399,8 +412,12 @@ void MultiRelay::switchRelay(uint8_t relay, bool mode) {
     IOexpanderWrite(addrPcf8574, state);
     DEBUG_PRINT(F("Writing to PCF8574: ")); DEBUG_PRINTLN(state);
   } else if (_relay[relay].pin < 100) {
+    #ifdef HWLED_TRIAC_ZCD_IO //#lc3200ac
+    triac_relay_states[relay][0] = _relay[relay].invert ? !_relay[relay].state : _relay[relay].state;
+    #else
     pinMode(_relay[relay].pin, OUTPUT);
     digitalWrite(_relay[relay].pin, _relay[relay].invert ? !_relay[relay].state : _relay[relay].state);
+    #endif
   } else return;
   publishMqtt(relay);
 }
@@ -507,22 +524,53 @@ void MultiRelay::setup() {
   // if we want PCF8574 expander I2C pins need to be valid
   if (i2c_sda<0 || i2c_scl<0) usePcf8574 = false;
 
+  #ifdef HWLED_TRIAC_ZCD_IO //#lc3200ac
+    detachInterrupt(digitalPinToInterrupt(HWLED_TRIAC_ZCD_IO));
+  #endif
+
   uint8_t state = 0;
   for (int i=0; i<MULTI_RELAY_MAX_RELAYS; i++) {
+    #ifdef HWLED_TRIAC_ZCD_IO //#lc3200ac
+    triac_relay_pins[i] = -1;
+    #endif    
     if (usePcf8574 && _relay[i].pin >= 100) {
       uint8_t pin = _relay[i].pin - 100;
       if (!_relay[i].external) _relay[i].state = !offMode;
       state |= (uint8_t)(_relay[i].invert ? !_relay[i].state : _relay[i].state) << pin;
     } else if (_relay[i].pin<100 && _relay[i].pin>=0) {
       if (PinManager::allocatePin(_relay[i].pin,true, PinOwner::UM_MultiRelay)) {
+        #ifdef HWLED_TRIAC_ZCD_IO //#lc3200ac
+        triac_relay_pins[i] = _relay[i].pin;
+        _relay[i].state = false;
+
+        bool defaultLevel = _relay[i].invert ? HIGH : LOW;
+
+        // Initialize physical GPIO immediately
+        digitalWrite(_relay[i].pin, defaultLevel);
+        pinMode(_relay[i].pin, OUTPUT);
+        digitalWrite(_relay[i].pin, defaultLevel);
+
+        // Both registers now represent the applied state
+        triac_relay_states[i][0] = defaultLevel;
+        triac_relay_states[i][1] = defaultLevel;
+        #else
         if (!_relay[i].external) _relay[i].state = !offMode;
-        switchRelay(i, _relay[i].state);
+        switchRelay(i, _relay[i].state);        
+        #endif
         _relay[i].active = false;
       } else {
         _relay[i].pin = -1;  // allocation failed
       }
     }
   }
+#ifdef HWLED_TRIAC_ZCD_IO //#lc3200ac
+  pinMode(HWLED_TRIAC_ZCD_IO, INPUT_PULLUP);
+  attachInterrupt(
+      digitalPinToInterrupt(HWLED_TRIAC_ZCD_IO),
+      triacZCD,
+      FALLING
+  );
+#endif  
   if (usePcf8574) {
     IOexpanderWrite(addrPcf8574, state);  // init expander (set all outputs)
     DEBUG_PRINTLN(F("PCF8574(s) inited."));
@@ -542,6 +590,7 @@ void MultiRelay::loop() {
   if (millis() - lastUpdate < 100) return;  // update only 10 times/s
   lastUpdate = millis();
 
+  #ifndef BOARD_LC3200AC //#lc3200ac
   //set relay when LEDs turn on
   if (_oldMode != offMode) {
     _oldMode = offMode;
@@ -552,6 +601,7 @@ void MultiRelay::loop() {
   }
 
   handleOffTimer();
+  #endif
 }
 
 /**
@@ -825,6 +875,7 @@ bool MultiRelay::readFromConfig(JsonObject &root) {
   return !top[FPSTR(_pcf8574)].isNull();
 }
 
+
 // strings to reduce flash memory usage (used more than twice)
 const char MultiRelay::_name[]            PROGMEM = "MultiRelay";
 const char MultiRelay::_enabled[]         PROGMEM = "enabled";
@@ -844,3 +895,10 @@ const char MultiRelay::_Command[]         PROGMEM = "/command";
 
 static MultiRelay multi_relay;
 REGISTER_USERMOD(multi_relay);
+
+#ifdef BOARD_LC3200AC //#lc3200ac
+//define a global function so that it can be called at e131.cpp
+void MultiRelay_switchRelay(uint8_t relay, bool mode){
+  multi_relay.switchRelay(relay, mode);
+}
+#endif

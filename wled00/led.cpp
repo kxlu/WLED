@@ -43,10 +43,18 @@ void toggleOnOff()
 {
   if (bri == 0)
   {
+    #ifdef EFUSE_SHDN_PIN //#lc3201
+    digitalWrite(EFUSE_SHDN_PIN, HIGH);
+    #endif
+
     bri = briLast;
     strip.restartRuntime();
   } else
   {
+    #ifdef EFUSE_SHDN_PIN //#lc3201
+    digitalWrite(EFUSE_SHDN_PIN, LOW);
+    #endif
+
     briLast = bri;
     bri = 0;
   }

@@ -217,6 +217,15 @@ void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8
       {
         if (uni != e131Universe || availDMXLen < 2) return;
 
+        #if defined(BOARD_LC3200AC) and defined(USERMOD_MULTI_RELAY) //#lc3200ac
+        for(int i=0; i<MULTI_RELAY_MAX_RELAYS; i++){
+          if(i >= availDMXLen) break;
+          MultiRelay_switchRelay(i, e131_data[dataOffset+i] >= 127 ? true : false);
+        }
+        return;
+        break;
+        #endif
+
         // limit max. selectable preset to 250, even though DMX max. val is 255
         int dmxValPreset = (e131_data[dataOffset+1] > 250 ? 250 : e131_data[dataOffset+1]);
         

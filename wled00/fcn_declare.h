@@ -605,4 +605,9 @@ void sendDataWs(AsyncWebSocketClient * client = nullptr);
 void XML_response(Print& dest);
 void getSettingsJS(byte subPage, Print& dest);
 
+#ifdef BOARD_LC3200AC //#lc3200ac
+//define a global function so that it can be called at e131.cpp
+void MultiRelay_switchRelay(uint8_t relay, bool mode);
+#endif
+
 #endif
