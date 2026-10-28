@@ -414,7 +414,7 @@ static_assert(WLED_MAX_BUSSES <= 32, "WLED_MAX_BUSSES exceeds hard limit");
 #define WLED_ETH_GLEDOPTO         13
 #define WLED_ETH_QUINLED_V4_UNOQUAD  14
 #define WLED_ETH_QUINLED_V4_OCTA     15
-#define WLED_ETH_DEFAULT WLED_ETH_WT32_ETH01 //#lc3200
+#define WLED_ETH_DEFAULT WLED_ETH_WT32_ETH01 //#lc3204
 
 //Hue error codes
 #define HUE_ERROR_INACTIVE        0
