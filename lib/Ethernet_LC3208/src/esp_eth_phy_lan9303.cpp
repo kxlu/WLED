@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+//#include <Arduino.h>
 
 static const char *TAG = "lan9303";
 namespace {
@@ -40,6 +41,91 @@ static esp_err_t write_reg(Device *p, uint32_t reg, uint32_t value) {
     esp_err_t e=p->mediator->phy_reg_write(p->mediator,p->addr,reg,value);
     if(e!=ESP_OK) ESP_LOGE(TAG,"MDIO write addr=%lu reg=%lu failed: %s",(unsigned long)p->addr,(unsigned long)reg,esp_err_to_name(e));
     return e;
+}
+static esp_err_t configure_leds(Device *p)
+{
+    // LAN9303 system CSR LED_CFG = 0x01BC.
+    // SMI mapping: PHY address 22, registers 30 (low) and 31 (high).
+    // Requires LAN9303 SMI management mode.
+
+    constexpr uint32_t SMI_PHY = 22;
+    constexpr uint32_t REG_LO  = 30;
+    constexpr uint32_t REG_HI  = 31;
+
+    constexpr uint32_t LED_CFG = 0x0000023F;
+    uint32_t lo = 0, hi = 0;
+
+    esp_err_t e = p->mediator->phy_reg_read(
+        p->mediator, SMI_PHY, REG_LO, &lo);
+    if (e != ESP_OK) return e;
+
+    e = p->mediator->phy_reg_read(
+        p->mediator, SMI_PHY, REG_HI, &hi);
+    if (e != ESP_OK) return e;
+
+    ESP_EARLY_LOGE(TAG, "LED_CFG before: 0x%04lX%04lX",
+                (unsigned long)(hi & 0xFFFF),
+                (unsigned long)(lo & 0xFFFF));
+    /*
+    Serial.printf("LED_CFG before: 0x%04lX%04lX\n",
+        (unsigned long)(hi & 0xFFFF),
+        (unsigned long)(lo & 0xFFFF));
+    */
+
+    // Reject an invalid SMI response.
+    if ((lo & 0xFFFF) == 0xFFFF &&
+        (hi & 0xFFFF) == 0xFFFF)
+        return ESP_ERR_NOT_FOUND;
+
+    // Preserve unrelated register bits.
+    uint32_t value = ((hi & 0xFFFF) << 16) | (lo & 0xFFFF);
+    value = (value & ~0x0000033F) | LED_CFG;
+
+    e = p->mediator->phy_reg_write(
+        p->mediator, SMI_PHY, REG_LO, value & 0xFFFF);
+    if (e != ESP_OK) return e;
+
+    e = p->mediator->phy_reg_write(
+        p->mediator, SMI_PHY, REG_HI, value >> 16);
+    if (e != ESP_OK) return e;
+
+    // Read back LED_CFG after writing
+    uint32_t read_lo = 0;
+    uint32_t read_hi = 0;
+
+    e = p->mediator->phy_reg_read(
+        p->mediator, SMI_PHY, REG_LO, &read_lo);
+    if (e != ESP_OK) return e;
+
+    e = p->mediator->phy_reg_read(
+        p->mediator, SMI_PHY, REG_HI, &read_hi);
+    if (e != ESP_OK) return e;
+
+    uint32_t readback =
+        ((read_hi & 0xFFFF) << 16) | (read_lo & 0xFFFF);
+
+    ESP_EARLY_LOGE(TAG, "LED_CFG written:  0x%08lX",
+                (unsigned long)value);
+
+    ESP_EARLY_LOGE(TAG, "LED_CFG readback: 0x%08lX",
+                (unsigned long)readback);
+/*
+    Serial.printf("LED_CFG written:  0x%08lX\n",
+        (unsigned long)value);
+
+    Serial.printf("LED_CFG readback: 0x%08lX\n",
+        (unsigned long)readback);
+*/
+    if (readback != value) {
+        ESP_EARLY_LOGE(TAG, "LED_CFG VERIFY FAILED!");
+        //Serial.println("LED_CFG VERIFY FAILED!");
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    ESP_EARLY_LOGE(TAG, "LED_CFG VERIFY OK");
+    //Serial.println("LED_CFG VERIFY OK");
+
+    return ESP_OK;
 }
 static esp_err_t set_mediator(esp_eth_phy_t *phy,esp_eth_mediator_t *m) {
     if(!m) return ESP_ERR_INVALID_ARG;
@@ -94,6 +180,17 @@ static esp_err_t init(esp_eth_phy_t *phy) {
     p->initialized=false;
     esp_err_t e=verify(p);
     if(e!=ESP_OK) { ESP_LOGE(TAG,"LAN9303 initialization FAILED: %s",esp_err_to_name(e)); return e; }
+    /*
+    LED_CFG = 0x0000003F by default, 
+    Port 1 Link/Activity : LED2(pin27), Speed : LED0(pin29)
+    Port 2 Link/Activity : LED5(pin24), Speed : LED3(pin26)
+
+    esp_err_t led_err = configure_leds(p);
+    if (led_err != ESP_OK) {
+        ESP_LOGW(TAG, "LAN9303 LED configuration failed: %s",
+                esp_err_to_name(led_err));
+    }  
+    */  
     p->link=ETH_LINK_DOWN;
     p->initialized=true;
     return ESP_OK;
