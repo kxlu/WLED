@@ -492,6 +492,12 @@ void WLED::setup()
   }
 #endif
 
+#ifdef BOARD_LC3208 //#lc3208
+  // Enable SN74AHCT125 outputs (active LOW)
+  digitalWrite(BUFFER_EN_IO, LOW);
+  pinMode(BUFFER_EN_IO, OUTPUT);
+#endif
+
   DEBUG_PRINTLN(F("Initializing strip"));
   beginStrip();
   DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());

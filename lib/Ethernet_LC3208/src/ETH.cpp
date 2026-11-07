@@ -41,6 +41,7 @@
 #include "lwip/dns.h"
 
 #ifdef ETH_LAN9303
+#include "esp_log.h"
 #include "esp_eth_phy_lan9303.h"
 #endif
 
@@ -235,6 +236,28 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
 {
 #if ESP_IDF_VERSION_MAJOR > 3
     eth_clock_mode = clock_mode;
+
+#ifdef ETH_LAN9303 //#lc3208
+    // Hold LAN9303 in reset
+    log_i("LAN9303: Reset LOW");
+    digitalWrite(LAN9303_RST_IO, LOW);
+    pinMode(LAN9303_RST_IO, OUTPUT);
+
+    // Enable Y1 oscillator
+    log_i("LAN9303: Enable oscillator");
+    digitalWrite(LAN9303_Y1_IO, HIGH);
+    pinMode(LAN9303_Y1_IO, OUTPUT);
+
+    delay(50);  // Allow oscillator to stabilize
+
+    // Release LAN9303 reset
+    log_i("LAN9303: Release reset");
+    digitalWrite(LAN9303_RST_IO, HIGH);
+
+    delay(200); // Allow LAN9303 to initialize
+    log_i("LAN9303: Hardware initialization complete");
+#endif
+
     tcpipInit();
 
     if (use_mac_from_efuse)
@@ -269,7 +292,7 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
 #endif
 
     if(eth_mac == NULL){
-        log_e("esp_eth_mac_new_esp32 failed");
+        log_e("esp_eth_mac_new_esp32 failed");    
         return false;
     }
 
@@ -279,9 +302,11 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
     esp_eth_phy_t *eth_phy = NULL;
     switch(type){
         case ETH_PHY_LAN8720:
-            #ifdef ETH_LAN9303:
+            #ifdef ETH_LAN9303 //#lc3208
+                log_i("SELECTING LAN9303 PHY DRIVER");
                 eth_phy = esp_eth_phy_new_lan9303(&phy_config);
             #else
+                log_i("SELECTING LAN8720 PHY DRIVER");
                 eth_phy = esp_eth_phy_new_lan8720(&phy_config);
             #endif
             break;
@@ -326,13 +351,21 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
 
     eth_handle = NULL;
     esp_eth_config_t eth_config = ETH_DEFAULT_CONFIG(eth_mac, eth_phy);
-    //eth_config.on_lowlevel_init_done = on_lowlevel_init_done;
-    //eth_config.on_lowlevel_deinit_done = on_lowlevel_deinit_done;
+
+#ifdef ETH_LAN9303 //#lc3208
+    esp_err_t err = esp_eth_driver_install(&eth_config, &eth_handle);
+    if (err != ESP_OK || eth_handle == NULL) {
+        log_e("esp_eth_driver_install failed: %s (0x%X)",
+            esp_err_to_name(err), (unsigned int)err);
+        return false;
+    }   
+#else
     if(esp_eth_driver_install(&eth_config, &eth_handle) != ESP_OK || eth_handle == NULL){
         log_e("esp_eth_driver_install failed");
         return false;
     }
-    
+#endif
+
     /* attach Ethernet driver to TCP/IP stack */
     if(esp_netif_attach(eth_netif, esp_eth_new_netif_glue(eth_handle)) != ESP_OK){
         log_e("esp_netif_attach failed");
