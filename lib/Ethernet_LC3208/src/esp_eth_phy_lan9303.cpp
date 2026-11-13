@@ -9,9 +9,22 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-//#include <Arduino.h>
+// 0 = Disabled
+// 1 = ESP_LOGI
+// 2 = Serial.printf
+#define LAN9303_DEBUG_MODE 0
 
-static const char *TAG = "lan9303";
+#if LAN9303_DEBUG_MODE == 1
+    #define LAN9303_DEBUG(fmt, ...) \
+        ESP_LOGI("lan9303", fmt, ##__VA_ARGS__)
+#elif LAN9303_DEBUG_MODE == 2
+    #include <Arduino.h>
+    #define LAN9303_DEBUG(fmt, ...) \
+        Serial.printf("[LAN9303] " fmt "\n", ##__VA_ARGS__)
+#else
+    #define LAN9303_DEBUG(fmt, ...) do {} while (0)
+#endif
+
 namespace {
 constexpr uint32_t BMCR=0, BMSR=1, ID1=2, ID2=3, ANAR=4, ANLPAR=5, SPECIAL=31;
 constexpr uint32_t RESET=0x8000, LOOPBACK=0x4000, SPEED100=0x2000;
@@ -33,13 +46,13 @@ static esp_err_t read_reg(Device *p, uint32_t reg, uint32_t *value) {
     if (!p->mediator || !value) return ESP_ERR_INVALID_STATE;
     *value=0xffffffff;
     esp_err_t e=p->mediator->phy_reg_read(p->mediator,p->addr,reg,value);
-    if(e!=ESP_OK) ESP_LOGE(TAG,"MDIO read addr=%lu reg=%lu failed: %s",(unsigned long)p->addr,(unsigned long)reg,esp_err_to_name(e));
+    if(e!=ESP_OK) LAN9303_DEBUG("MDIO read addr=%lu reg=%lu failed: %s",(unsigned long)p->addr,(unsigned long)reg,esp_err_to_name(e));
     return e;
 }
 static esp_err_t write_reg(Device *p, uint32_t reg, uint32_t value) {
     if(!p->mediator) return ESP_ERR_INVALID_STATE;
     esp_err_t e=p->mediator->phy_reg_write(p->mediator,p->addr,reg,value);
-    if(e!=ESP_OK) ESP_LOGE(TAG,"MDIO write addr=%lu reg=%lu failed: %s",(unsigned long)p->addr,(unsigned long)reg,esp_err_to_name(e));
+    if(e!=ESP_OK) LAN9303_DEBUG("MDIO write addr=%lu reg=%lu failed: %s",(unsigned long)p->addr,(unsigned long)reg,esp_err_to_name(e));
     return e;
 }
 static esp_err_t configure_leds(Device *p)
@@ -63,14 +76,9 @@ static esp_err_t configure_leds(Device *p)
         p->mediator, SMI_PHY, REG_HI, &hi);
     if (e != ESP_OK) return e;
 
-    ESP_EARLY_LOGE(TAG, "LED_CFG before: 0x%04lX%04lX",
+    LAN9303_DEBUG( "LED_CFG before: 0x%04lX%04lX",
                 (unsigned long)(hi & 0xFFFF),
                 (unsigned long)(lo & 0xFFFF));
-    /*
-    Serial.printf("LED_CFG before: 0x%04lX%04lX\n",
-        (unsigned long)(hi & 0xFFFF),
-        (unsigned long)(lo & 0xFFFF));
-    */
 
     // Reject an invalid SMI response.
     if ((lo & 0xFFFF) == 0xFFFF &&
@@ -104,33 +112,54 @@ static esp_err_t configure_leds(Device *p)
     uint32_t readback =
         ((read_hi & 0xFFFF) << 16) | (read_lo & 0xFFFF);
 
-    ESP_EARLY_LOGE(TAG, "LED_CFG written:  0x%08lX",
+    LAN9303_DEBUG( "LED_CFG written:  0x%08lX",
                 (unsigned long)value);
 
-    ESP_EARLY_LOGE(TAG, "LED_CFG readback: 0x%08lX",
+    LAN9303_DEBUG( "LED_CFG readback: 0x%08lX",
                 (unsigned long)readback);
-/*
-    Serial.printf("LED_CFG written:  0x%08lX\n",
-        (unsigned long)value);
-
-    Serial.printf("LED_CFG readback: 0x%08lX\n",
-        (unsigned long)readback);
-*/
     if (readback != value) {
-        ESP_EARLY_LOGE(TAG, "LED_CFG VERIFY FAILED!");
-        //Serial.println("LED_CFG VERIFY FAILED!");
+        LAN9303_DEBUG( "LED_CFG VERIFY FAILED!");
         return ESP_ERR_INVALID_RESPONSE;
     }
 
-    ESP_EARLY_LOGE(TAG, "LED_CFG VERIFY OK");
-    //Serial.println("LED_CFG VERIFY OK");
+    LAN9303_DEBUG( "LED_CFG VERIFY OK");
+
+    return ESP_OK;
+}
+static esp_err_t enable_auto_mdix(Device *p)
+{
+    for (uint32_t port = 1; port <= 2; port++) {
+        uint32_t value = 0;
+
+        esp_err_t err = p->mediator->phy_reg_read(
+            p->mediator, port, 27, &value);
+
+        if (err != ESP_OK) return err;
+
+        // Enable software override and Auto-MDIX.
+        uint32_t new_value = value | 0xC000;
+
+        err = p->mediator->phy_reg_write(
+            p->mediator, port, 27, new_value);
+
+        if (err != ESP_OK) return err;
+
+        uint32_t verify = 0;
+        err = p->mediator->phy_reg_read(
+            p->mediator, port, 27, &verify);
+
+        if (err != ESP_OK) return err;
+
+        if ((verify & 0xC000) != 0xC000)
+            return ESP_ERR_INVALID_RESPONSE;
+    }
 
     return ESP_OK;
 }
 static esp_err_t set_mediator(esp_eth_phy_t *phy,esp_eth_mediator_t *m) {
     if(!m) return ESP_ERR_INVALID_ARG;
     ctx(phy)->mediator=m;
-    ESP_LOGI(TAG,"mediator installed");
+    LAN9303_DEBUG("mediator installed");
     return ESP_OK;
 }
 // Strict, non-destructive Virtual PHY verification. The ID registers are programmable
@@ -142,44 +171,46 @@ static esp_err_t verify(Device *p) {
     READ(BMCR,ctrl); READ(BMSR,stat); READ(ID1,id1); READ(ID2,id2);
     READ(ANAR,adv); READ(ANLPAR,partner); READ(SPECIAL,special);
 #undef READ
-    ESP_LOGI(TAG,"VPHY@%lu BMCR=%04lx BMSR=%04lx ID=%04lx:%04lx ANAR=%04lx ANLPAR=%04lx SPECIAL=%04lx",
+    LAN9303_DEBUG("VPHY@%lu BMCR=%04lx BMSR=%04lx ID=%04lx:%04lx ANAR=%04lx ANLPAR=%04lx SPECIAL=%04lx",
         (unsigned long)p->addr,(unsigned long)(ctrl&0xffff),(unsigned long)(stat&0xffff),
         (unsigned long)(id1&0xffff),(unsigned long)(id2&0xffff),
         (unsigned long)(adv&0xffff),(unsigned long)(partner&0xffff),(unsigned long)(special&0xffff));
     if (ctrl==0xffff && stat==0xffff && special==0xffff) {
-        ESP_LOGE(TAG,"MDIO bus returned all ones; no verified device"); return ESP_ERR_NOT_FOUND;
+        LAN9303_DEBUG("MDIO bus returned all ones; no verified device"); return ESP_ERR_NOT_FOUND;
     }
     // LAN9303 Virtual PHY supports 10/100 full/half duplex, bits 14..11.
     if ((stat & 0x7800u)!=0x7800u) {
-        ESP_LOGE(TAG,"Invalid VPHY capabilities: BMSR=0x%04lx",(unsigned long)stat); return ESP_ERR_INVALID_RESPONSE;
+        LAN9303_DEBUG("Invalid VPHY capabilities: BMSR=0x%04lx",(unsigned long)stat); return ESP_ERR_INVALID_RESPONSE;
     }
     if ((special & SPECIAL_MODE_MASK)!=SPECIAL_RMII_PHY) {
-        ESP_LOGE(TAG,"Port0 not RMII PHY mode: SPECIAL=0x%04lx",(unsigned long)special); return ESP_ERR_INVALID_STATE;
+        LAN9303_DEBUG("Port0 not RMII PHY mode: SPECIAL=0x%04lx",(unsigned long)special); return ESP_ERR_INVALID_STATE;
     }
     if (!(special & SPECIAL_CLOCK_OUT)) {
-        ESP_LOGE(TAG,"Port0 RMII 50MHz clock is not configured as OUTPUT"); return ESP_ERR_INVALID_STATE;
+        LAN9303_DEBUG("Port0 RMII 50MHz clock is not configured as OUTPUT"); return ESP_ERR_INVALID_STATE;
     }
     if (special & SPECIAL_TURBO) {
-        ESP_LOGE(TAG,"Unexpected Turbo MII mode"); return ESP_ERR_INVALID_STATE;
+        LAN9303_DEBUG("Unexpected Turbo MII mode"); return ESP_ERR_INVALID_STATE;
     }
     if ((adv & 0x001fu)!=ANAR_SELECTOR) {
-        ESP_LOGE(TAG,"Invalid Virtual PHY ANAR selector: 0x%04lx",(unsigned long)adv); return ESP_ERR_INVALID_RESPONSE;
+        LAN9303_DEBUG("Invalid Virtual PHY ANAR selector: 0x%04lx",(unsigned long)adv); return ESP_ERR_INVALID_RESPONSE;
     }
     if (!(stat & BMSR_LINK)) {
-        ESP_LOGE(TAG,"Virtual PHY internal link not up"); return ESP_ERR_INVALID_STATE;
+        LAN9303_DEBUG("Virtual PHY internal link not up"); return ESP_ERR_INVALID_STATE;
     }
-    ESP_LOGI(TAG,"LAN9303 Virtual PHY verified (RMII PHY, clock out)");
+    LAN9303_DEBUG("LAN9303 Virtual PHY verified (RMII PHY, clock out)");
     return ESP_OK;
 }
 static esp_err_t init(esp_eth_phy_t *phy) {
     Device *p=ctx(phy);
-    ESP_LOGI(TAG,"init entered; MDIO address=%lu",(unsigned long)p->addr);
+    LAN9303_DEBUG("init entered; MDIO address=%lu",(unsigned long)p->addr);
     if(!p->mediator) return ESP_ERR_INVALID_STATE;
     // LC3208 uses the strapped Virtual PHY address 0. Never auto-detect a cable PHY.
-    if(p->addr!=0) { ESP_LOGE(TAG,"LC3208 requires VPHY address 0, got %lu",(unsigned long)p->addr); return ESP_ERR_INVALID_ARG; }
+    if(p->addr!=0) { LAN9303_DEBUG("LC3208 requires VPHY address 0, got %lu",(unsigned long)p->addr); return ESP_ERR_INVALID_ARG; }
     p->initialized=false;
     esp_err_t e=verify(p);
-    if(e!=ESP_OK) { ESP_LOGE(TAG,"LAN9303 initialization FAILED: %s",esp_err_to_name(e)); return e; }
+    if(e!=ESP_OK) { LAN9303_DEBUG("LAN9303 initialization FAILED: %s",esp_err_to_name(e)); return e; }
+    e = enable_auto_mdix(p);
+    if (e != ESP_OK) return e;
     /*
     LED_CFG = 0x0000003F by default, 
     Port 1 Link/Activity : LED2(pin27), Speed : LED0(pin29)
@@ -187,7 +218,7 @@ static esp_err_t init(esp_eth_phy_t *phy) {
 
     esp_err_t led_err = configure_leds(p);
     if (led_err != ESP_OK) {
-        ESP_LOGW(TAG, "LAN9303 LED configuration failed: %s",
+        LAN9303_DEBUG( "LAN9303 LED configuration failed: %s",
                 esp_err_to_name(led_err));
     }  
     */  
@@ -209,7 +240,7 @@ static esp_err_t get_link(esp_eth_phy_t *phy) {
         // SPECIAL[4:2]: 001=10H,010=100H,101=10F,110=100F.
         uint32_t mode=(special & SPECIAL_SPEED_DUPLEX_MASK)>>2;
         if(mode!=1 && mode!=2 && mode!=5 && mode!=6) {
-            ESP_LOGW(TAG,"VPHY speed/duplex not settled: SPECIAL=0x%04lx",(unsigned long)special);
+            LAN9303_DEBUG("VPHY speed/duplex not settled: SPECIAL=0x%04lx",(unsigned long)special);
             return ESP_OK; // retry at next poll, do not falsely announce Link
         }
         eth_speed_t speed=(mode==2 || mode==6)?ETH_SPEED_100M:ETH_SPEED_10M;
@@ -218,8 +249,8 @@ static esp_err_t get_link(esp_eth_phy_t *phy) {
         if(e!=ESP_OK) return e;
         e=p->mediator->on_state_changed(p->mediator,ETH_STATE_DUPLEX,(void *)(uintptr_t)duplex);
         if(e!=ESP_OK) return e;
-        ESP_LOGI(TAG,"CPU Port0 Virtual PHY UP: %s %s",speed==ETH_SPEED_100M?"100M":"10M",duplex==ETH_DUPLEX_FULL?"full":"half");
-    } else ESP_LOGW(TAG,"CPU Port0 Virtual PHY DOWN");
+        LAN9303_DEBUG("CPU Port0 Virtual PHY UP: %s %s",speed==ETH_SPEED_100M?"100M":"10M",duplex==ETH_DUPLEX_FULL?"full":"half");
+    } else LAN9303_DEBUG("CPU Port0 Virtual PHY DOWN");
     e=p->mediator->on_state_changed(p->mediator,ETH_STATE_LINK,(void *)(uintptr_t)link);
     if(e==ESP_OK) p->link=link;
     return e;
@@ -288,14 +319,14 @@ static esp_err_t del(esp_eth_phy_t *phy) { free(ctx(phy)); return ESP_OK; }
 } // namespace
 extern "C" esp_eth_phy_t *esp_eth_phy_new_lan9303(const eth_phy_config_t *config) {
 
-    ESP_LOGE("lan9303", "LAN9303 constructor entered");
+    LAN9303_DEBUG( "LAN9303 constructor entered");
     
     if (config == nullptr) {
-        ESP_LOGE("lan9303", "PHY config is NULL");
+        LAN9303_DEBUG( "PHY config is NULL");
         return nullptr;
     }
 
-    ESP_LOGE("lan9303",
+    LAN9303_DEBUG(
             "PHY config: addr=%d reset_gpio=%d "
             "reset_timeout=%u autonego_timeout=%u",
             config->phy_addr,
